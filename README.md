@@ -1,22 +1,22 @@
-# Google Android OTA and Factory Image Scraper
+# 📱 Google Android OTA and Factory Image Scraper
 
 A powerful Python tool for downloading and managing Google Android OTA and factory images. This tool allows you to easily fetch, filter, and download official Android system images for Google devices (Pixel, Nexus).
 
-## Features
+## ✨ Features
 
-- Download both OTA and factory images for Google devices
-- Support for modern Pixel devices and legacy Nexus devices
-- Smart filtering options (beta, carrier-specific, region-specific builds)
-- Interactive build picker in terminal mode
-- Automatic checksum verification
-- Caching system to reduce server load
-- Colored terminal output
-- JSON output support for automation
-- Device family grouping and analysis
-- Progress bars for downloads
-- Comprehensive logging
+- 📲 Download both OTA and factory images for Google devices
+- 🔄 Support for modern Pixel devices and legacy Nexus devices
+- 🎯 Smart filtering options (beta, carrier-specific, region-specific builds)
+- 🖥️ Interactive build picker in terminal mode
+- 🔒 Automatic checksum verification
+- ⚡ Caching system to reduce server load
+- 🎨 Colored terminal output
+- 🔧 JSON output support for automation
+- 📱 Device family grouping and analysis
+- 📊 Progress bars for downloads
+- 📝 Comprehensive logging
 
-## Installation
+## 🚀 Installation
 
 1. Clone the repository:
 ```bash
@@ -29,9 +29,9 @@ cd google-ota-download
 pip install -r requirements.txt
 ```
 
-## Usage
+## 📖 Usage
 
-### Basic Usage
+### 🔰 Basic Usage
 
 ```bash
 # Download latest OTA image for a device
@@ -47,7 +47,7 @@ python download.py --device husky --build BP1A.250305.019
 python download.py --device husky --build
 ```
 
-### Advanced Options
+### 🛠️ Advanced Options
 
 ```bash
 # Include beta builds
@@ -69,7 +69,7 @@ python download.py --device husky --no-verify-hash
 python download.py --device husky --json
 ```
 
-### Device Families
+### 👨‍👧‍👦 Device Families
 
 ```bash
 # List all device families
@@ -82,7 +82,7 @@ python download.py --family pixel8
 python download.py --family pixel8 --analyze-family
 ```
 
-### Cache Management
+### 💾 Cache Management
 
 ```bash
 # Show cache statistics
@@ -92,7 +92,7 @@ python download.py --cache-stats
 python download.py --clear-cache
 ```
 
-## Command Line Arguments
+## ⚙️ Command Line Arguments
 
 | Argument | Description |
 |----------|-------------|
@@ -109,10 +109,12 @@ python download.py --clear-cache
 | `--json` | Output results in JSON format |
 | `--debug` | Enable debug logging |
 | `--non-interactive` | Force non-interactive mode |
+| `--force`, `-f` | Force update even if files exist |
+| `--verify-hash` | Verify file hash |
 
-## Supported Devices
+## 📱 Supported Devices
 
-### Pixel Series
+### 📱 Pixel Series
 - Pixel 8 Pro (husky)
 - Pixel 8 (shiba)
 - Pixel 7 Pro (cheetah)
@@ -129,66 +131,96 @@ python download.py --clear-cache
 - Pixel 4a 5G (bramble)
 - And more...
 
-### Special Devices
+### 🌟 Special Devices
 - Pixel Fold (felix)
 - Pixel Tablet (tangorpro)
 
-### Legacy Devices
+### 📱 Legacy Devices
 - Various Nexus devices
 
-## Examples
+## 📝 Examples
 
-### Download Latest Stable OTA
+### 🔄 Download Latest Stable OTA
 
 ```bash
 python download.py --device husky --output ./downloads/
 ```
 
-### Download Specific Factory Image with Carrier Filter
+### 🏭 Download Specific Factory Image with Carrier Filter
 
 ```bash
 python download.py --device husky --factory --build BP1A.250305.019 --carrier Verizon
 ```
 
-### Analyze Family Update Status
+### 📊 Analyze Family Update Status
 
 ```bash
 python download.py --family pixel8 --analyze-family --json
 ```
 
-## Error Handling
+## ⚠️ Error Handling
 
 The tool includes comprehensive error handling:
-- Automatic retries for failed downloads
-- Checksum verification
-- Cache validation
-- Network error handling
-- Invalid device/build detection
+- 🔄 Automatic retries for failed downloads
+- 🔒 Checksum verification
+- 💾 Cache validation
+- 🌐 Network error handling
+- ❌ Invalid device/build detection
 
-## Logging
+## 📝 Logging
 
 Logs are stored in `android_images.log` with the following levels:
-- DEBUG: Detailed debugging information
-- INFO: General operational information
-- WARNING: Warning messages
-- ERROR: Error messages
-- CRITICAL: Critical errors
+- 🔍 DEBUG: Detailed debugging information
+- ℹ️ INFO: General operational information
+- ⚠️ WARNING: Warning messages
+- ❌ ERROR: Error messages
+- 🚨 CRITICAL: Critical errors
 
-## Contributing
+## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please feel free to submit a Pull Request. Here's how you can contribute:
 
-## License
+1. 🍴 Fork the repository
+2. 🔄 Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. 💾 Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. 📤 Push to the branch (`git push origin feature/amazing-feature`)
+5. 🎯 Open a Pull Request
+
+## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## Acknowledgments
+## 🙏 Acknowledgments
 
-- Google Android OTA and Factory Images pages
-- BeautifulSoup4 for HTML parsing
-- Colorama for terminal colors
-- Requests for HTTP handling
+- 🤖 Google Android OTA and Factory Images pages
+- 🔍 BeautifulSoup4 for HTML parsing
+- 🎨 Colorama for terminal colors
+- 🌐 Requests for HTTP handling
 
-## Disclaimer
+## ⚠️ Disclaimer
 
-This tool is not affiliated with, endorsed by, or related to Google in any way. Use at your own risk and responsibility. 
+This tool is not affiliated with, endorsed by, or related to Google in any way. Use at your own risk and responsibility.
+
+## 🔧 Advanced Configuration
+
+### Environment Variables
+- `PASSPHRASE_AVB`: AVB key passphrase
+- `PASSPHRASE_OTA`: OTA key passphrase
+- `MAGISK_PREINIT_DEVICE`: Device for Magisk preinit (default: sda10)
+
+### File Locations
+- 📁 OTA Directory: `/opt/android-ota/ota/`
+- 🔑 Keys Directory: `/opt/android-ota/keys/`
+- 🌐 Web Directory: `/var/www/ota/`
+
+### Security Features
+- 🔒 Automatic hash verification
+- 🔐 Secure key handling
+- 📝 Signature generation
+- 🔍 Permission validation
+
+### Automation Support
+- 🤖 JSON output for scripting
+- 📊 Family analysis for batch processing
+- 🔄 Automatic cleanup of old files
+- 📝 Detailed logging for monitoring 
