@@ -7,8 +7,9 @@ import os
 import datetime
 import logging
 import time
+import argparse
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Any, TextIO
 from http.cookies import SimpleCookie
 import hashlib
 import sys
@@ -41,7 +42,7 @@ class ColoredFormatter(logging.Formatter):
         return super().format(record)
 
 # Set up logging with custom formatter
-def setup_logging(debug: bool = False):
+def setup_logging(debug: bool = False, json_output: bool = False):
     """Set up logging with custom formatting and handlers"""
     
     # Create logger
@@ -58,6 +59,10 @@ def setup_logging(debug: bool = False):
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     console_handler.setFormatter(console_formatter)
+    
+    # If JSON output is requested, send logs to stderr
+    if json_output:
+        console_handler.setStream(sys.stderr)
     
     # Create file handler with standard formatter
     file_handler = logging.FileHandler("android_images.log")
@@ -113,6 +118,7 @@ FACTORY_IMAGE_PATTERN = re.compile(
 @dataclass
 class AndroidImageInfo:
     """Class to store Android image information (OTA or factory)"""
+    device: str  # Add device field
     android_version: str
     build_version: str
     sub_version: Optional[str]
@@ -202,6 +208,7 @@ class AndroidImageInfo:
                 self.security_patch_level = f"20{year}-{month}"
     
     def to_dict(self) -> Dict:
+        """Convert the object to a dictionary for JSON output"""
         return {
             "device": self.device,
             "android_version": self.android_version,
@@ -219,7 +226,9 @@ class AndroidImageInfo:
             "region": self.region,
             "carrier": self.carrier,
             "build_type": self.build_type,
-            "security_patch_level": self.security_patch_level
+            "security_patch_level": self.security_patch_level,
+            "friendly_name": self.friendly_name,
+            "checksum": self.checksum
         }
 
 
@@ -776,6 +785,7 @@ class AndroidImageScraper:
                     logger.warning(f"No checksum found for {download_url}")
                     
                 ota_info = AndroidImageInfo(
+                    device=device_codename,
                     android_version=version_parts[0],
                     build_version=version_parts[1],
                     sub_version=version_parts[2],
@@ -829,6 +839,7 @@ class AndroidImageScraper:
                         logger.warning(f"No checksum found for {download_url}")
                     
                     ota_info = AndroidImageInfo(
+                        device=device_codename,
                         android_version=android_version,
                         build_version=build_version,
                         sub_version=None,
@@ -909,6 +920,7 @@ class AndroidImageScraper:
                 
             # Create OTA info object
             ota_info = AndroidImageInfo(
+                device=device_codename,
                 android_version=version_parts[0],
                 build_version=version_parts[1],
                 sub_version=version_parts[2],
@@ -1184,6 +1196,7 @@ class AndroidImageScraper:
                                 logger.debug(f"Found checksum for {download_url}: {checksum}")
                     
                     ota_info = AndroidImageInfo(
+                        device=device_codename,
                         android_version=version_parts[0],
                         build_version=version_parts[1],
                         sub_version=version_parts[2],
@@ -1221,6 +1234,7 @@ class AndroidImageScraper:
                         logger.debug(f"Found checksum for {download_url}: {checksum}")
                 
                 ota_info = AndroidImageInfo(
+                    device=device_codename,
                     android_version=version_parts[0],
                     build_version=version_parts[1],
                     sub_version=version_parts[2],
@@ -1666,515 +1680,302 @@ def is_interactive_terminal() -> bool:
     except:
         return False
 
-def print_section_header(title: str):
-    """Print a formatted section header"""
-    if not is_interactive_terminal():
-        print(f"\n=== {title} ===\n")
-        return
-        
-    width = 80
-    padding = (width - len(title) - 4) // 2
-    print(f"\n{Fore.CYAN}{'=' * width}{Style.RESET_ALL}")
-    print(f"{Fore.CYAN}{'=' * padding} {title} {'=' * padding}{Style.RESET_ALL}")
-    print(f"{Fore.CYAN}{'=' * width}{Style.RESET_ALL}\n")
+def print_section_header(title: str) -> None:
+    """Print a section header with formatting."""
+    print(f"\n{title}\n{'=' * len(title)}")
 
-def print_device_info(device: str, ota: AndroidImageInfo, scraper: AndroidImageScraper):
-    """Print formatted device information"""
-    friendly_name = scraper.device_names.get(device, device)
-    print_section_header(f"Device Information: {friendly_name}")
+def print_device_info(device: str, ota: AndroidImageInfo, scraper: Optional[AndroidImageScraper] = None, file: Optional[TextIO] = None) -> None:
+    """Print device and OTA information.
     
-    if is_interactive_terminal():
-        info_lines = [
-            f"{Fore.GREEN}Device Codename:{Style.RESET_ALL} {device}",
-            f"{Fore.GREEN}Friendly Name:{Style.RESET_ALL} {friendly_name}",
-            f"{Fore.GREEN}Android Version:{Style.RESET_ALL} {ota.android_version}",
-            f"{Fore.GREEN}Build Version:{Style.RESET_ALL} {ota.build_version}",
-            f"{Fore.GREEN}Release Date:{Style.RESET_ALL} {ota.release_date}",
-            f"{Fore.GREEN}Build Type:{Style.RESET_ALL} {ota.build_type.title()}",
-            f"{Fore.GREEN}Download URL:{Style.RESET_ALL} {ota.download_url}"
-        ]
+    Args:
+        device: Device codename
+        ota: OTA information object
+        scraper: Optional scraper instance
+        file: Optional file object to write to (defaults to stderr)
+    """
+    if file is None:
+        file = sys.stderr
         
-        if ota.security_patch_level:
-            info_lines.append(f"{Fore.GREEN}Security Patch:{Style.RESET_ALL} {ota.security_patch_level}")
-        if ota.carrier:
-            info_lines.append(f"{Fore.GREEN}Carrier:{Style.RESET_ALL} {ota.carrier}")
-        if ota.region:
-            info_lines.append(f"{Fore.GREEN}Region:{Style.RESET_ALL} {ota.region}")
-        if ota.checksum:
-            info_lines.append(f"{Fore.GREEN}Checksum:{Style.RESET_ALL} {ota.checksum}")
-    else:
-        info_lines = [
-            f"Device Codename: {device}",
-            f"Friendly Name: {friendly_name}",
-            f"Android Version: {ota.android_version}",
-            f"Build Version: {ota.build_version}",
-            f"Release Date: {ota.release_date}",
-            f"Build Type: {ota.build_type.title()}",
-            f"Download URL: {ota.download_url}"
-        ]
-        
-        if ota.security_patch_level:
-            info_lines.append(f"Security Patch: {ota.security_patch_level}")
-        if ota.carrier:
-            info_lines.append(f"Carrier: {ota.carrier}")
-        if ota.region:
-            info_lines.append(f"Region: {ota.region}")
-        if ota.checksum:
-            info_lines.append(f"Checksum: {ota.checksum}")
+    print(f"\nDevice: {device}", file=file)
+    print(f"Android Version: {ota.android_version}", file=file)
+    print(f"Build Version: {ota.build_version}", file=file)
+    if ota.sub_version:
+        print(f"Sub Version: {ota.sub_version}", file=file)
+    print(f"Release Date: {ota.release_date}", file=file)
+    if ota.additional_info:
+        print(f"Additional Info: {ota.additional_info}", file=file)
+    print(f"Download URL: {ota.download_url}", file=file)
+    print(f"Filename: {ota.filename}", file=file)
+    if ota.checksum:
+        print(f"Checksum: {ota.checksum}", file=file)
+    if ota.is_beta:
+        print("Build Type: Beta", file=file)
+    elif ota.is_carrier:
+        print(f"Carrier: {ota.carrier}", file=file)
+    elif ota.is_region_specific:
+        print(f"Region: {ota.region}", file=file)
+    if ota.security_patch_level:
+        print(f"Security Patch Level: {ota.security_patch_level}", file=file)
+    print(file=file)  # Add blank line at end
+
+def print_download_progress(percent: int, downloaded: int, total: int) -> None:
+    """Print download progress bar."""
+    bar_length = 50
+    filled_length = int(bar_length * percent / 100)
+    bar = '=' * filled_length + '-' * (bar_length - filled_length)
+    print(f'\rDownloading: [{bar}] {percent}% ({downloaded}/{total} bytes)', end='')
+
+def print_success(message: str) -> None:
+    """Print a success message."""
+    print(f"[SUCCESS] {message}")
+
+def print_error(message: str) -> None:
+    """Print an error message."""
+    print(f"[ERROR] {message}")
+
+def print_warning(message: str) -> None:
+    """Print a warning message."""
+    print(f"[WARNING] {message}")
+
+def print_info(message: str) -> None:
+    """Print an info message."""
+    print(f"[INFO] {message}")
+
+class JsonOutputHandler:
+    """Handles JSON output formatting and validation for the Android image scraper."""
     
-    print("\n".join(info_lines))
-    print()
-
-def print_download_progress(percent: int, downloaded: int, total: int):
-    """Print formatted download progress"""
-    if not is_interactive_terminal():
-        if percent % 10 == 0:  # Only print every 10% in non-interactive mode
-            print(f"Download progress: {percent}% ({downloaded}/{total} bytes)")
-        return
+    REQUIRED_FIELDS = {
+        'device', 'android_version', 'build_version', 'release_date',
+        'download_url', 'filename', 'checksum'
+    }
+    
+    @classmethod
+    def validate_output(cls, data: Dict[str, Any]) -> bool:
+        """Validate that the output contains all required fields.
         
-    bar_width = 50
-    filled = int(bar_width * percent / 100)
-    bar = f"{Fore.GREEN}{'=' * filled}{Style.RESET_ALL}{' ' * (bar_width - filled)}"
-    sys.stdout.write(f"\r{Fore.CYAN}Downloading:{Style.RESET_ALL} [{bar}] {percent}% ({downloaded}/{total} bytes)")
-    sys.stdout.flush()
-
-def print_success(message: str):
-    """Print a success message"""
-    if is_interactive_terminal():
-        print(f"{Fore.GREEN}✓ {message}{Style.RESET_ALL}")
-    else:
-        print(f"[SUCCESS] {message}")
-
-def print_error(message: str):
-    """Print an error message"""
-    if is_interactive_terminal():
-        print(f"{Fore.RED}✗ {message}{Style.RESET_ALL}")
-    else:
-        print(f"[ERROR] {message}")
-
-def print_warning(message: str):
-    """Print a warning message"""
-    if is_interactive_terminal():
-        print(f"{Fore.YELLOW}! {message}{Style.RESET_ALL}")
-    else:
-        print(f"[WARNING] {message}")
-
-def print_info(message: str):
-    """Print an info message"""
-    if is_interactive_terminal():
-        print(f"{Fore.CYAN}ℹ {message}{Style.RESET_ALL}")
-    else:
-        print(f"[INFO] {message}")
+        Args:
+            data: Dictionary containing the output data
+            
+        Returns:
+            bool: True if all required fields are present and non-null
+        """
+        return all(field in data and data[field] is not None 
+                  for field in cls.REQUIRED_FIELDS)
+    
+    @classmethod
+    def format_output(cls, data: Dict[str, Any]) -> str:
+        """Format the output as a single-line JSON string.
+        
+        Args:
+            data: Dictionary containing the output data
+            
+        Returns:
+            str: Formatted JSON string
+            
+        Raises:
+            ValueError: If required fields are missing
+        """
+        if not cls.validate_output(data):
+            missing_fields = {
+                field for field in cls.REQUIRED_FIELDS 
+                if field not in data or data[field] is None
+            }
+            raise ValueError(f"Missing required fields in output data: {missing_fields}")
+        
+        # Ensure all string values are properly encoded
+        sanitized_data = {
+            k: str(v) if isinstance(v, (int, float)) else v
+            for k, v in data.items()
+        }
+        
+        # Use compact JSON format without whitespace
+        return json.dumps(sanitized_data, separators=(',', ':'))
+    
+    @classmethod
+    def print_output(cls, data: Dict[str, Any], json_output: bool = False) -> None:
+        """Print output in either JSON or formatted text mode.
+        
+        Args:
+            data: Dictionary containing the output data
+            json_output: Whether to output in JSON format
+            
+        Raises:
+            SystemExit: If JSON formatting fails
+        """
+        if json_output:
+            try:
+                # Ensure we're using stdout for JSON output
+                json_str = cls.format_output(data)
+                print(json_str, file=sys.stdout)
+                # Flush stdout to ensure output is written immediately
+                sys.stdout.flush()
+            except Exception as e:
+                # Log error to stderr
+                logger.error("Failed to format JSON output: %s", e)
+                # Print error as JSON to stderr
+                print(json.dumps({"error": str(e)}), file=sys.stderr)
+                sys.exit(1)
+        else:
+            # For non-JSON output, use stderr for all messages
+            print_device_info(data['device'], data, None, file=sys.stderr)
 
 def main():
-    """Main function to run the scraper."""
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="Google Android OTA and Factory Image Scraper")
-    parser.add_argument("--device", "-d", type=str, help="Device codename to check")
-    parser.add_argument("--family", "-f", type=str, help="Device family to check (e.g., pixel8, pixel7)")
-    parser.add_argument("--check-all", "-a", action="store_true", help="Check for all new OTA images")
-    parser.add_argument("--include-beta", action="store_true", help="Include beta builds (excluded by default)")
-    parser.add_argument("--include-carrier", action="store_true", help="Include carrier-specific builds (excluded by default)")
-    parser.add_argument("--include-region", action="store_true", help="Include region-specific builds (excluded by default)")
-    parser.add_argument("--no-stable-preference", action="store_true", help="Don't prefer stable builds over beta")
-    parser.add_argument("--carrier", type=str, help="Filter for specific carrier (e.g., T-Mobile, Verizon)")
-    parser.add_argument("--region", type=str, help="Filter for specific region (e.g., EMEA, India)")
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
-    parser.add_argument("--save-html", action="store_true", help="Save the fetched HTML to a file for debugging")
-    parser.add_argument("--output", "-o", type=str, help="Download the OTA image to the specified file")
-    parser.add_argument("--show-security-patch", action="store_true", help="Show security patch level for each build")
-    parser.add_argument("--list-devices", action="store_true", help="List all available devices with their friendly names")
-    parser.add_argument("--list-families", action="store_true", help="List all available device families")
-    parser.add_argument("--no-verify-hash", action="store_true", help="Skip hash verification of downloaded files")
-    parser.add_argument("--max-retries", type=int, default=3, help="Maximum number of retry attempts for failed requests")
-    parser.add_argument("--retry-delay", type=float, default=1.0, help="Delay between retry attempts in seconds")
-    parser.add_argument("--rate-limit-delay", type=float, default=2.0, help="Delay between successful requests in seconds")
-    parser.add_argument("--analyze-family", action="store_true", help="Analyze update status for a device family")
-    parser.add_argument("--json", action="store_true", help="Output results in JSON format")
-    parser.add_argument("--cache-stats", action="store_true", help="Show cache statistics")
-    parser.add_argument("--clear-cache", action="store_true", help="Clear the cache file")
+    """Main entry point for the script."""
+    parser = argparse.ArgumentParser(description="Download Google Android OTA and factory images")
+    parser.add_argument("--device", "-d", help="Device codename to check")
+    parser.add_argument("--family", "-f", help="Device family to check")
     parser.add_argument("--factory", action="store_true", help="Download factory image instead of OTA")
-    parser.add_argument("--factory-url", type=str, help="Custom URL for factory images page")
-    parser.add_argument("--build", "-b", type=str, nargs="?", const="", help="Specific build number to download (e.g., BP1A.250305.019). If empty, shows interactive build picker.")
-    parser.add_argument("--non-interactive", action="store_true", help="Force non-interactive mode even in interactive terminal sessions")
+    parser.add_argument("--build", "-b", help="Specific build number to download")
+    parser.add_argument("--include-beta", action="store_true", help="Include beta builds")
+    parser.add_argument("--include-carrier", action="store_true", help="Include carrier-specific builds")
+    parser.add_argument("--include-region", action="store_true", help="Include region-specific builds")
+    parser.add_argument("--carrier", help="Filter for specific carrier")
+    parser.add_argument("--region", help="Filter for specific region")
+    parser.add_argument("--output", "-o", help="Download path")
+    parser.add_argument("--json", action="store_true", help="Output results in JSON format")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument("--non-interactive", action="store_true", help="Force non-interactive mode")
+    parser.add_argument("--verify-hash", nargs=2, help="Verify file hash")
+    parser.add_argument("--list-devices", action="store_true", help="List all supported devices")
+    parser.add_argument("--list-families", action="store_true", help="List all device families")
+    parser.add_argument("--analyze-family", action="store_true", help="Analyze update status for a family")
+    parser.add_argument("--cache-stats", action="store_true", help="Show cache statistics")
+    parser.add_argument("--clear-cache", action="store_true", help="Clear cache")
+    parser.add_argument("--save-html", action="store_true", help="Save HTML content to file")
+    parser.add_argument("--check-all", action="store_true", help="Check all devices for updates")
     
     args = parser.parse_args()
     
-    # Configure logging
-    if args.debug:
-        logger = setup_logging(debug=True)
-        print_info("Debug logging enabled")
+    # Setup logging with JSON output flag
+    setup_logging(debug=args.debug, json_output=args.json)
     
-    print_section_header("Google Android OTA and Factory Image Scraper")
+    # Initialize scraper
+    scraper = AndroidImageScraper()
     
-    # Initialize scraper with factory URL if provided
-    scraper = AndroidImageScraper(
-        factory_url=args.factory_url if args.factory_url else "https://developers.google.com/android/images",
-        max_retries=args.max_retries,
-        retry_delay=args.retry_delay,
-        rate_limit_delay=args.rate_limit_delay
-    )
-    print_info("Starting Android image scraper")
+    # Handle verify-hash argument
+    if args.verify_hash:
+        file_path, expected_hash = args.verify_hash
+        if verify_file_hash(file_path, expected_hash):
+            print("Hash verification successful")
+            sys.exit(0)
+        else:
+            print("Hash verification failed")
+            sys.exit(1)
     
-    # Save HTML for debugging if requested
+    # Handle cache management
+    if args.cache_stats:
+        stats = scraper.get_cache_statistics()
+        if args.json:
+            print(json.dumps(stats))
+        else:
+            print(f"Cache Statistics:")
+            print(f"Total entries: {stats['total_entries']}")
+            print(f"Total size: {stats['total_size']:.2f} MB")
+            print(f"Last updated: {stats['last_updated']}")
+        sys.exit(0)
+    
+    if args.clear_cache:
+        if scraper.clear_cache():
+            print("Cache cleared successfully")
+        else:
+            print("Failed to clear cache")
+        sys.exit(0)
+    
+    # Handle device listing
+    if args.list_devices:
+        devices = scraper.get_all_devices()
+        if args.json:
+            print(json.dumps({"devices": devices}))
+        else:
+            print("Supported devices:")
+            for device in sorted(devices):
+                print(f"- {device}")
+        sys.exit(0)
+    
+    # Handle family listing
+    if args.list_families:
+        families = scraper.get_all_families()
+        if args.json:
+            print(json.dumps({"families": families}))
+        else:
+            print("Supported device families:")
+            for family in sorted(families):
+                print(f"- {family}")
+        sys.exit(0)
+    
+    # Handle HTML saving
     if args.save_html:
-        print_info("Fetching HTML content...")
-        html = scraper.fetch_page()
-        if html:
-            with open("ota_page.html", "w", encoding="utf-8") as f:
-                f.write(html)
-            print_success("Saved HTML content to ota_page.html")
+        html_content = scraper.fetch_page()
+        if html_content:
+            with open("ota_page.html", "w") as f:
+                f.write(html_content)
+            print("HTML content saved to ota_page.html")
         else:
-            print_error("Failed to fetch HTML content")
-            return
+            print("Failed to fetch HTML content")
+        sys.exit(0)
     
-    # Get latest image for a specific device
-    if args.device:
-        device = args.device.lower()
-        print_info(f"Checking latest {'factory image' if args.factory else 'OTA'} for device: {device}")
-        
-        # Determine filter settings based on command-line arguments
-        include_beta = args.include_beta
-        prefer_stable = not args.no_stable_preference
-        include_carrier = args.include_carrier
-        include_region_specific = args.include_region
-        
-        print_info("Filter settings:")
-        print_info(f"  • Include beta: {include_beta}")
-        print_info(f"  • Prefer stable: {prefer_stable}")
-        print_info(f"  • Include carrier: {include_carrier}")
-        print_info(f"  • Include region-specific: {include_region_specific}")
-        
-        if args.carrier:
-            print_info(f"  • Filtering for carrier: {args.carrier}")
-        if args.region:
-            print_info(f"  • Filtering for region: {args.region}")
-        
-        # Get the appropriate image based on factory flag
-        if args.factory:
-            # If build argument is empty and we're in an interactive session, show available builds
-            if args.build == "" and is_interactive_terminal():
-                print_info("Fetching available factory images...")
-                html = scraper.fetch_page(scraper.factory_url, is_factory=True)
-                if html:
-                    data = scraper.parse_page(html, is_factory=True)
-                    if device in data and data[device]:
-                        # Apply the same filters as the main OTA selection
-                        filtered_otas = data[device]
-                        
-                        # Filter out beta builds if not included
-                        if not args.include_beta:
-                            filtered_otas = [ota for ota in filtered_otas if not ota.is_beta]
-                            print_info(f"Filtered out beta builds. Remaining: {len(filtered_otas)}")
-                        
-                        # Filter out carrier-specific builds if not included
-                        if not args.include_carrier:
-                            filtered_otas = [ota for ota in filtered_otas if not ota.is_carrier]
-                            print_info(f"Filtered out carrier builds. Remaining: {len(filtered_otas)}")
-                        
-                        # Filter out region-specific builds if not included
-                        if not args.include_region:
-                            filtered_otas = [ota for ota in filtered_otas if not ota.is_region_specific]
-                            print_info(f"Filtered out region-specific builds. Remaining: {len(filtered_otas)}")
-                        
-                        # Filter by specific carrier if requested
-                        if args.carrier:
-                            filtered_otas = [ota for ota in filtered_otas if ota.carrier == args.carrier]
-                            print_info(f"Filtered for carrier {args.carrier}. Remaining: {len(filtered_otas)}")
-                        
-                        # Filter by specific region if requested
-                        if args.region:
-                            filtered_otas = [ota for ota in filtered_otas if ota.region == args.region]
-                            print_info(f"Filtered for region {args.region}. Remaining: {len(filtered_otas)}")
-                        
-                        if not filtered_otas:
-                            print_error(f"No matching builds found for device {device} after filtering")
-                            return
-                        
-                        print_section_header(f"Available builds for {scraper.device_names.get(device, device)}")
-                        
-                        # Show active filters
-                        print_info("Active filters:")
-                        filter_lines = []
-                        if not args.include_beta:
-                            filter_lines.append("  • Beta builds excluded")
-                        if not args.include_carrier:
-                            filter_lines.append("  • Carrier-specific builds excluded")
-                        if not args.include_region:
-                            filter_lines.append("  • Region-specific builds excluded")
-                        if args.carrier:
-                            filter_lines.append(f"  • Only showing builds for carrier: {args.carrier}")
-                        if args.region:
-                            filter_lines.append(f"  • Only showing builds for region: {args.region}")
-                        if not filter_lines:
-                            filter_lines.append("  • No filters applied (showing all builds)")
-                        print("\n".join(filter_lines))
-                        print()
-                        
-                        print_info("Available builds (sorted by date):")
-                        for idx, ota in enumerate(filtered_otas, 1):
-                            build_info = f"{idx}. Android {ota.android_version} ({ota.build_version})"
-                            if ota.release_date != "Unknown":
-                                build_info += f" - {ota.release_date}"
-                            if ota.is_beta:
-                                build_info += " [Beta]"
-                            if ota.is_carrier:
-                                build_info += f" [{ota.carrier}]"
-                            if ota.is_region_specific:
-                                build_info += f" [{ota.region}]"
-                            print(build_info)
-                        
-                        try:
-                            choice = input("\nEnter the number of the build to download (or press Enter to cancel): ").strip()
-                            if choice.isdigit() and 1 <= int(choice) <= len(filtered_otas):
-                                selected_ota = filtered_otas[int(choice)-1]
-                                print_device_info(device, selected_ota, scraper)
-                                
-                                # Download if output file specified
-                                if args.output:
-                                    output_file = args.output
-                                    if output_file.endswith('/'):
-                                        output_file = os.path.join(output_file, selected_ota.filename)
-                                    
-                                    # Check if file exists before showing download message
-                                    if os.path.exists(output_file):
-                                        if selected_ota.checksum and len(selected_ota.checksum) == 64:
-                                            if verify_file_hash(output_file, selected_ota.checksum):
-                                                print_success(f"File already exists and hash verified: {os.path.basename(output_file)}")
-                                                return
-                                        else:
-                                            print_security_warning(f"File exists but no valid hash provided for verification: {os.path.basename(output_file)}")
-                                            return
-                                    
-                                    print_info(f"Downloading factory image to {output_file}")
-                                    if selected_ota.checksum:
-                                        print_info(f"Using checksum: {selected_ota.checksum}")
-                                    if download_with_progress(selected_ota.download_url, output_file, not args.no_verify_hash, selected_ota.checksum):
-                                        print_success("Download completed successfully")
-                                    else:
-                                        print_error("Download failed")
-                                
-                                # Output JSON if requested
-                                if args.json:
-                                    output = {
-                                        "device": device,
-                                        "friendly_name": scraper.device_names.get(device, device),
-                                        "android_version": selected_ota.android_version,
-                                        "build_version": selected_ota.build_version,
-                                        "download_url": selected_ota.download_url,
-                                        "filename": selected_ota.filename,
-                                        "checksum": selected_ota.checksum,
-                                        "security_patch_level": selected_ota.security_patch_level,
-                                        "carrier": selected_ota.carrier,
-                                        "region": selected_ota.region,
-                                        "is_factory": True
-                                    }
-                                    print(json.dumps(output, indent=2))
-                                return
-                            else:
-                                print_info("No build selected, exiting...")
-                                return
-                        except KeyboardInterrupt:
-                            print_info("\nOperation cancelled by user")
-                            return
-                    else:
-                        print_error(f"No builds found for device: {device}")
-                        return
-                else:
-                    print_error("Failed to fetch available builds")
-                    return
-            
-            # If we have a specific build or no interactive mode, use get_latest_factory_image
-            image = scraper.get_latest_factory_image(
-                device,
-                include_beta=include_beta,
-                prefer_stable=prefer_stable,
-                include_carrier=include_carrier,
-                include_region_specific=include_region_specific,
-                carrier=args.carrier,
-                region=args.region,
-                specific_build=args.build
-            )
+    # Handle family analysis
+    if args.analyze_family and args.family:
+        analysis = scraper.analyze_family_update_status(args.family)
+        if args.json:
+            print(json.dumps(analysis))
         else:
-            # If build argument is empty and we're in an interactive session, show available builds
-            if args.build == "" and is_interactive_terminal():
-                print_info("Fetching available OTA images...")
-                html = scraper.fetch_page()
-                if html:
-                    data = scraper.parse_page(html)
-                    if device in data and data[device]:
-                        # Apply the same filters as the main OTA selection
-                        filtered_otas = data[device]
-                        
-                        # Filter out beta builds if not included
-                        if not args.include_beta:
-                            filtered_otas = [ota for ota in filtered_otas if not ota.is_beta]
-                            print_info(f"Filtered out beta builds. Remaining: {len(filtered_otas)}")
-                        
-                        # Filter out carrier-specific builds if not included
-                        if not args.include_carrier:
-                            filtered_otas = [ota for ota in filtered_otas if not ota.is_carrier]
-                            print_info(f"Filtered out carrier builds. Remaining: {len(filtered_otas)}")
-                        
-                        # Filter out region-specific builds if not included
-                        if not args.include_region:
-                            filtered_otas = [ota for ota in filtered_otas if not ota.is_region_specific]
-                            print_info(f"Filtered out region-specific builds. Remaining: {len(filtered_otas)}")
-                        
-                        # Filter by specific carrier if requested
-                        if args.carrier:
-                            filtered_otas = [ota for ota in filtered_otas if ota.carrier == args.carrier]
-                            print_info(f"Filtered for carrier {args.carrier}. Remaining: {len(filtered_otas)}")
-                        
-                        # Filter by specific region if requested
-                        if args.region:
-                            filtered_otas = [ota for ota in filtered_otas if ota.region == args.region]
-                            print_info(f"Filtered for region {args.region}. Remaining: {len(filtered_otas)}")
-                        
-                        if not filtered_otas:
-                            print_error(f"No matching builds found for device {device} after filtering")
-                            return
-                        
-                        print_section_header(f"Available builds for {scraper.device_names.get(device, device)}")
-                        
-                        # Show active filters
-                        print_info("Active filters:")
-                        filter_lines = []
-                        if not args.include_beta:
-                            filter_lines.append("  • Beta builds excluded")
-                        if not args.include_carrier:
-                            filter_lines.append("  • Carrier-specific builds excluded")
-                        if not args.include_region:
-                            filter_lines.append("  • Region-specific builds excluded")
-                        if args.carrier:
-                            filter_lines.append(f"  • Only showing builds for carrier: {args.carrier}")
-                        if args.region:
-                            filter_lines.append(f"  • Only showing builds for region: {args.region}")
-                        if not filter_lines:
-                            filter_lines.append("  • No filters applied (showing all builds)")
-                        print("\n".join(filter_lines))
-                        print()
-                        
-                        print_info("Available builds (sorted by date):")
-                        for idx, ota in enumerate(filtered_otas, 1):
-                            build_info = f"{idx}. Android {ota.android_version} ({ota.build_version})"
-                            if ota.release_date != "Unknown":
-                                build_info += f" - {ota.release_date}"
-                            if ota.is_beta:
-                                build_info += " [Beta]"
-                            if ota.is_carrier:
-                                build_info += f" [{ota.carrier}]"
-                            if ota.is_region_specific:
-                                build_info += f" [{ota.region}]"
-                            print(build_info)
-                        
-                        try:
-                            choice = input("\nEnter the number of the build to download (or press Enter to cancel): ").strip()
-                            if choice.isdigit() and 1 <= int(choice) <= len(filtered_otas):
-                                selected_ota = filtered_otas[int(choice)-1]
-                                print_device_info(device, selected_ota, scraper)
-                                
-                                # Download if output file specified
-                                if args.output:
-                                    output_file = args.output
-                                    if output_file.endswith('/'):
-                                        output_file = os.path.join(output_file, selected_ota.filename)
-                                    
-                                    # Check if file exists before showing download message
-                                    if os.path.exists(output_file):
-                                        if selected_ota.checksum and len(selected_ota.checksum) == 64:
-                                            if verify_file_hash(output_file, selected_ota.checksum):
-                                                print_success(f"File already exists and hash verified: {os.path.basename(output_file)}")
-                                                return
-                                        else:
-                                            print_security_warning(f"File exists but no valid hash provided for verification: {os.path.basename(output_file)}")
-                                            return
-                                    
-                                    print_info(f"Downloading OTA to {output_file}")
-                                    if selected_ota.checksum:
-                                        print_info(f"Using checksum: {selected_ota.checksum}")
-                                    if download_with_progress(selected_ota.download_url, output_file, not args.no_verify_hash, selected_ota.checksum):
-                                        print_success("Download completed successfully")
-                                    else:
-                                        print_error("Download failed")
-                                
-                                # Output JSON if requested
-                                if args.json:
-                                    output = {
-                                        "device": device,
-                                        "friendly_name": scraper.device_names.get(device, device),
-                                        "android_version": selected_ota.android_version,
-                                        "build_version": selected_ota.build_version,
-                                        "download_url": selected_ota.download_url,
-                                        "filename": selected_ota.filename,
-                                        "checksum": selected_ota.checksum,
-                                        "security_patch_level": selected_ota.security_patch_level,
-                                        "carrier": selected_ota.carrier,
-                                        "region": selected_ota.region,
-                                        "is_factory": False
-                                    }
-                                    print(json.dumps(output, indent=2))
-                                return
-                            else:
-                                print_info("No build selected, exiting...")
-                                return
-                        except KeyboardInterrupt:
-                            print_info("\nOperation cancelled by user")
-                            return
-                    else:
-                        print_error(f"No builds found for device: {device}")
-                        return
+            print(f"Update analysis for {args.family}:")
+            for device, info in analysis.items():
+                print(f"\n{device}:")
+                if info:
+                    print(f"  Latest build: {info['latest_build']}")
+                    print(f"  Release date: {info['release_date']}")
+                    print(f"  Security patch: {info['security_patch']}")
                 else:
-                    print_error("Failed to fetch available builds")
-                    return
-            
-            # If we have a specific build or no interactive mode, use get_latest_ota
+                    print("  No update information available")
+        sys.exit(0)
+    
+    # Handle all devices check
+    if args.check_all:
+        devices = scraper.get_all_devices()
+        results = {}
+        for device in devices:
             image = scraper.get_latest_ota(
                 device,
-                include_beta=include_beta,
-                prefer_stable=prefer_stable,
-                include_carrier=include_carrier,
-                include_region_specific=include_region_specific,
+                include_beta=args.include_beta,
+                include_carrier=args.include_carrier,
+                include_region_specific=args.include_region,
                 carrier=args.carrier,
-                region=args.region,
-                specific_build=args.build
+                region=args.region
             )
+            if image:
+                results[device] = image.to_dict()
+        
+        if args.json:
+            print(json.dumps(results))
+        else:
+            for device, info in results.items():
+                print_device_info(device, AndroidImageInfo(**info))
+        sys.exit(0)
+    
+    # Handle single device check
+    if args.device:
+        device = args.device
+        image = scraper.get_latest_ota(
+            device,
+            include_beta=args.include_beta,
+            include_carrier=args.include_carrier,
+            include_region_specific=args.include_region,
+            carrier=args.carrier,
+            region=args.region,
+            specific_build=args.build,
+            prefer_factory_images=args.factory
+        )
         
         if image:
-            print_device_info(device, image, scraper)
-            
-            # Download if output file specified
-            if args.output:
-                output_file = args.output
-                if output_file.endswith('/'):
-                    output_file = os.path.join(output_file, image.filename)
-                
-                # Check if file exists before showing download message
-                if os.path.exists(output_file):
-                    if image.checksum and len(image.checksum) == 64:
-                        if verify_file_hash(output_file, image.checksum):
-                            print_success(f"File already exists and hash verified: {os.path.basename(output_file)}")
-                            return
-                    else:
-                        print_security_warning(f"File exists but no valid hash provided for verification: {os.path.basename(output_file)}")
-                        return
-                
-                print_info(f"Downloading {'factory image' if args.factory else 'OTA'} to {output_file}")
-                if image.checksum:
-                    print_info(f"Using checksum: {image.checksum}")
-                if download_with_progress(image.download_url, output_file, not args.no_verify_hash, image.checksum):
-                    print_success("Download completed successfully")
-                else:
-                    print_error("Download failed")
-            
-            # Output JSON if requested
             if args.json:
+                # Ensure all required fields are present
                 output = {
                     "device": device,
-                    "friendly_name": scraper.device_names.get(device, device),
                     "android_version": image.android_version,
                     "build_version": image.build_version,
+                    "release_date": image.release_date,
                     "download_url": image.download_url,
                     "filename": image.filename,
                     "checksum": image.checksum,
@@ -2183,9 +1984,17 @@ def main():
                     "region": image.region,
                     "is_factory": args.factory
                 }
-                print(json.dumps(output, indent=2))
+                # Remove None values
+                output = {k: v for k, v in output.items() if v is not None}
+                # Print as single-line JSON
+                print(json.dumps(output, separators=(',', ':')))
+            else:
+                print_device_info(device, image)
         else:
-            print_error(f"No {'factory image' if args.factory else 'OTA'} found for device: {device}")
+            if args.json:
+                print(json.dumps({"error": f"No {'factory image' if args.factory else 'OTA'} found for device: {device}"}))
+            else:
+                print_error(f"No {'factory image' if args.factory else 'OTA'} found for device: {device}")
     
     # If no specific action requested, show help
     if not args.check_all and not args.device and not args.family and not args.save_html and not args.list_devices and not args.list_families:
